@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f1e7">
+  <meta name="description" content="A loose, fast stick-figure storyboard and puppeteering tool.">
+  <title>Stickboard — Puppet your rough cut</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Stickboard home">
+      <span class="brand-mark" aria-hidden="true"><i></i><b></b></span>
+      <span>STICKBOARD</span>
+    </a>
+    <div class="project-title">
+      <span class="status-dot" aria-hidden="true"></span>
+      <input id="projectName" value="The Great Hallway Escape" aria-label="Project name">
+      <span class="autosave">Saved locally</span>
+    </div>
+    <div class="header-actions">
+      <button class="icon-button" id="undoBtn" title="Undo background stroke" aria-label="Undo background stroke">↶</button>
+      <button class="icon-button" id="helpBtn" title="Quick guide" aria-label="Open quick guide">?</button>
+      <button class="button export-button" id="exportBtn"><span>⇩</span> Export video</button>
+      <button class="button button-dark" id="playAllBtn"><span>▶</span> Play rough cut</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="panel tools-panel" aria-label="Scene tools">
+      <section>
+        <div class="section-label">MAKE THE SET</div>
+        <div class="tool-grid" role="group" aria-label="Drawing tools">
+          <button class="tool active" data-tool="puppet"><span class="tool-icon">↖</span><b>Puppet</b><small>V</small></button>
+          <button class="tool" data-tool="pencil"><span class="tool-icon">✎</span><b>Pencil</b><small>P</small></button>
+          <button class="tool" data-tool="eraser"><span class="tool-icon">⌫</span><b>Eraser</b><small>E</small></button>
+          <button class="tool" data-tool="line"><span class="tool-icon">╱</span><b>Line</b><small>L</small></button>
+        </div>
+      </section>
+
+      <section class="tool-options">
+        <div class="section-label">INK</div>
+        <div class="color-row" id="inkColors" aria-label="Ink color">
+          <button class="swatch selected" data-color="#20231f" style="--swatch:#20231f" aria-label="Charcoal"></button>
+          <button class="swatch" data-color="#ef5b38" style="--swatch:#ef5b38" aria-label="Orange"></button>
+          <button class="swatch" data-color="#2869d8" style="--swatch:#2869d8" aria-label="Blue"></button>
+          <button class="swatch" data-color="#f1b72c" style="--swatch:#f1b72c" aria-label="Yellow"></button>
+          <input id="customColor" type="color" value="#7c4dff" aria-label="Custom color">
+        </div>
+        <label class="range-label" for="brushSize"><span>Brush size</span><output id="brushOutput">5</output></label>
+        <input id="brushSize" type="range" min="2" max="24" value="5">
+      </section>
+
+      <section>
+        <div class="section-label label-row"><span>BACKDROP</span><button id="clearBgBtn">Clear</button></div>
+        <div class="backdrop-grid" id="backdrops">
+          <button class="backdrop selected" data-bg="#fbf9f2" style="--bg:#fbf9f2" aria-label="Paper backdrop"></button>
+          <button class="backdrop" data-bg="#d9ecff" style="--bg:#d9ecff" aria-label="Sky backdrop"></button>
+          <button class="backdrop" data-bg="#ffe1cc" style="--bg:#ffe1cc" aria-label="Peach backdrop"></button>
+          <button class="backdrop checker" data-bg="transparent" aria-label="Transparent backdrop"></button>
+        </div>
+      </section>
+
+      <div class="tip-card">
+        <span>✦</span>
+        <p><b>Messy is the point.</b><br>Draw just enough to remember the shot.</p>
+      </div>
+    </aside>
+
+    <section class="stage-area" aria-label="Storyboard stage">
+      <div class="scene-meta">
+        <div>
+          <span class="take-pill" id="sceneNumber">SCENE 01</span>
+          <input id="sceneName" value="Hallway — wide shot" aria-label="Scene name">
+        </div>
+        <div class="stage-hint" id="stageHint"><span>↖</span> Drag a figure to puppeteer</div>
+      </div>
+
+      <div class="canvas-shell" id="canvasShell">
+        <canvas id="stageCanvas" width="960" height="540" aria-label="Drawing and puppeteering stage"></canvas>
+        <div class="recording-badge" id="recordingBadge"><i></i> RECORDING <span id="recordTimer">0:00.0</span></div>
+        <div class="export-status" id="exportStatus" role="status">
+          <span class="export-spinner" aria-hidden="true"></span>
+          <b>Rendering your rough cut…</b>
+          <span id="exportProgress">0%</span>
+          <i><span id="exportProgressBar"></span></i>
+        </div>
+        <div class="empty-nudge" id="emptyNudge">Grab a stick figure<br><span>and make some trouble ↓</span></div>
+      </div>
+
+      <div class="transport">
+        <div class="transport-left">
+          <button class="button record-button" id="recordBtn"><i></i><span>Record movement</span></button>
+          <button class="transport-button" id="rewindBtn" aria-label="Go to start">|◀</button>
+          <button class="transport-button play-button" id="playBtn" aria-label="Play scene">▶</button>
+          <span class="timecode"><b id="currentTime">0:00.0</b> / <span id="durationTime">0:04.0</span></span>
+        </div>
+        <div class="transport-right">
+          <label for="sceneDuration">Length</label>
+          <select id="sceneDuration" aria-label="Scene length">
+            <option value="3000">3 sec</option>
+            <option value="4000" selected>4 sec</option>
+            <option value="6000">6 sec</option>
+            <option value="8000">8 sec</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel actors-panel" aria-label="Actors">
+      <section>
+        <div class="section-label label-row"><span>ACTORS IN THIS SCENE</span><span id="actorCount">2</span></div>
+        <div id="actorList" class="actor-list"></div>
+        <button class="add-actor" id="addActorBtn"><span>＋</span> Add another actor</button>
+      </section>
+
+      <section class="performance-card">
+        <div class="section-label">PERFORMANCE</div>
+        <label for="poseStyle">Walk style</label>
+        <select id="poseStyle">
+          <option value="loose">Loosey-goosey</option>
+          <option value="sneak">Sneaky</option>
+          <option value="hero">Big hero steps</option>
+        </select>
+        <label class="toggle-row"><span><b>Show onion trail</b><small>See the last few positions</small></span><input id="onionToggle" type="checkbox" checked><i></i></label>
+        <label class="toggle-row"><span><b>Face movement</b><small>Turn toward travel</small></span><input id="faceToggle" type="checkbox" checked><i></i></label>
+      </section>
+
+      <div class="pass-note" id="passNote">
+        <b>Layer your performances</b>
+        <p>Record one actor, pick another, then record again. Old moves stay put.</p>
+      </div>
+    </aside>
+  </main>
+
+  <section class="timeline-section" aria-label="Scene timeline">
+    <div class="timeline-header">
+      <div>
+        <span class="section-label">ROUGH CUT</span>
+        <b><span id="sceneCount">2</span> scenes · <span id="totalDuration">8 sec</span></b>
+      </div>
+      <div class="timeline-actions">
+        <button id="duplicateSceneBtn">Duplicate scene</button>
+        <button class="button button-yellow" id="addSceneBtn">＋ New scene</button>
+      </div>
+    </div>
+    <div class="timeline-wrap">
+      <div class="timeline-playhead"><span></span></div>
+      <div class="timeline" id="timeline"></div>
+    </div>
+    <p class="timeline-tip">Drag scene cards to reorder your rough cut.</p>
+  </section>
+
+  <dialog id="helpDialog">
+    <button class="dialog-close" id="closeHelp" aria-label="Close">×</button>
+    <span class="dialog-kicker">60-SECOND TOUR</span>
+    <h2>Make the blocking.<br>Skip the polish.</h2>
+    <ol>
+      <li><b>Sketch the set</b><span>Use Pencil or Line right on the board.</span></li>
+      <li><b>Puppet an actor</b><span>Choose Puppet, then drag a figure around.</span></li>
+      <li><b>Record a pass</b><span>Hit record and drag. Repeat for each actor.</span></li>
+      <li><b>Cut it together</b><span>Add scenes and reorder them in the timeline.</span></li>
+    </ol>
+    <button class="button button-dark dialog-action" id="gotItBtn">Got it — let’s make a mess</button>
+  </dialog>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>
