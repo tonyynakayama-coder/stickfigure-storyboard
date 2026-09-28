@@ -7,12 +7,14 @@
   const ctx = canvas.getContext('2d');
   const W = canvas.width;
   const H = canvas.height;
+  const STORAGE_KEY = 'stickboard-projects-v1';
 
   const actorPalette = ['#ef5b38', '#2869d8', '#3b9a68', '#8a55c7', '#df9f14', '#d64178'];
-  let nextActorId = 3;
-  let nextSceneId = 3;
-  let activeSceneId = 1;
-  let activeActorId = 1;
+  let nextActorId = 1;
+  let nextSceneId = 1;
+  let activeSceneId = null;
+  let activeActorId = null;
+  let currentProjectId = null;
   let tool = 'puppet';
   let ink = '#20231f';
   let brushSize = 5;
@@ -39,21 +41,112 @@
     id, name, background, actors, duration, drawing: null, thumb: null
   });
 
-  let scenes = [
-    makeScene(1, 'Hallway — wide shot', '#fbf9f2', [
-      makeActor(1, 'Hero-ish', actorPalette[0], 330, 338),
-      makeActor(2, 'Suspicious Pal', actorPalette[1], 640, 344)
-    ]),
-    makeScene(2, 'The awkward reveal', '#d9ecff', [
-      makeActor(3, 'Hero-ish', actorPalette[0], 430, 345),
-      makeActor(4, 'Suspicious Pal', actorPalette[1], 590, 345)
-    ])
-  ];
-  nextActorId = 5;
+  let scenes = [];
 
   const scene = () => scenes.find(s => s.id === activeSceneId);
-  const actor = () => scene().actors.find(a => a.id === activeActorId);
+  const actor = () => scene()?.actors.find(a => a.id === activeActorId);
   const clone = (obj) => JSON.parse(JSON.stringify(obj));
+  const escapeHtml = value => String(value).replace(/[&<>'"]/g,character=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'
+  })[character]);
+
+  function readProjects() {
+    try {
+      const projects=JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      return Array.isArray(projects) ? projects : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function writeProjects(projects) {
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(projects));
+  }
+
+  function persistProject() {
+    if(!currentProjectId)return;
+    const projects=readProjects();
+    const project={
+      id:currentProjectId,
+      name:$('#projectName').value.trim() || 'Untitled project',
+      updatedAt:Date.now(),
+      activeSceneId,
+      nextActorId,
+      nextSceneId,
+      scenes:clone(scenes).map(s=>({...s,thumb:null}))
+    };
+    const index=projects.findIndex(p=>p.id===currentProjectId);
+    if(index>=0)projects[index]=project;else projects.unshift(project);
+    try {
+      writeProjects(projects);
+      $('#saveStatus').textContent='Saved on this device';
+    } catch(error) {
+      console.error(error);
+      $('#saveStatus').textContent='Could not save';
+      toast('Browser storage is full — export or delete an older project');
+    }
+  }
+
+  function createBlankProject() {
+    if(recording)finishRecording();
+    stopPlayback();
+    currentProjectId=`project-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+    scenes=[]; activeSceneId=null; activeActorId=null; nextActorId=1; nextSceneId=1; history=[];
+    $('#projectName').value='Untitled project';
+    persistProject();
+    renderEmptyProject();
+    if($('#projectDialog').open)$('#projectDialog').close();
+    toast('Blank project ready');
+  }
+
+  function openProject(project) {
+    if(recording)finishRecording();
+    stopPlayback();
+    currentProjectId=project.id;
+    scenes=clone(project.scenes || []);
+    nextActorId=project.nextActorId || Math.max(1,...scenes.flatMap(s=>s.actors.map(a=>a.id+1)));
+    nextSceneId=project.nextSceneId || Math.max(1,...scenes.map(s=>s.id+1));
+    $('#projectName').value=project.name || 'Untitled project';
+    history=[];
+    const requested=scenes.some(s=>s.id===project.activeSceneId) ? project.activeSceneId : scenes[0]?.id;
+    if(requested)loadScene(requested);else renderEmptyProject();
+    if($('#projectDialog').open)$('#projectDialog').close();
+  }
+
+  function renderProjectChooser() {
+    const projects=readProjects().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+    const list=$('#recentProjects');
+    list.innerHTML='';
+    $('#recentProjectsWrap').hidden=!projects.length;
+    projects.forEach(project=>{
+      const row=document.createElement('button');
+      row.className='recent-project';
+      const count=project.scenes?.length || 0;
+      const updated=project.updatedAt ? new Date(project.updatedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'}) : 'Saved draft';
+      const safeName=escapeHtml(project.name || 'Untitled project');
+      row.innerHTML=`<span class="project-preview">${count || '—'}</span><span class="recent-project-info"><b>${safeName}</b><small>${count} ${count===1?'scene':'scenes'} · edited ${updated}</small></span><span class="project-delete" role="button" tabindex="0" aria-label="Delete ${safeName}">×</span>`;
+      row.addEventListener('click',()=>openProject(project));
+      const remove=row.querySelector('.project-delete');
+      const deleteProject=event=>{
+        event.stopPropagation();
+        const remaining=readProjects().filter(p=>p.id!==project.id);
+        writeProjects(remaining);
+        if(project.id===currentProjectId)currentProjectId=null;
+        renderProjectChooser();
+        toast('Project deleted from this device');
+      };
+      remove.addEventListener('click',deleteProject);
+      remove.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();deleteProject(event);}});
+      list.appendChild(row);
+    });
+  }
+
+  function showProjectChooser() {
+    if(recording)finishRecording();
+    persistProject();
+    renderProjectChooser();
+    if(!$('#projectDialog').open)$('#projectDialog').showModal();
+  }
 
   function canvasPoint(event) {
     const rect = canvas.getBoundingClientRect();
@@ -79,6 +172,12 @@
 
   function drawBackdrop(s) {
     ctx.clearRect(0, 0, W, H);
+    if(!s) {
+      ctx.fillStyle='#fbf9f2';
+      ctx.fillRect(0,0,W,H);
+      drawGrid();
+      return;
+    }
     if (s.background !== 'transparent') {
       ctx.fillStyle = s.background;
       ctx.fillRect(0, 0, W, H);
@@ -158,6 +257,7 @@
   function render(time = null) {
     const s = scene();
     drawBackdrop(s);
+    if(!s)return;
     const showOnion = $('#onionToggle').checked;
     s.actors.forEach(a => {
       const pos = time === null ? {x:a.x,y:a.y,facing:a.facing,phase:a.phase} : positionAt(a,time);
@@ -192,10 +292,11 @@
   }
 
   function hitActor(point) {
-    return [...scene().actors].reverse().find(a => Math.hypot(point.x - a.x, point.y - (a.y - 70)) < 75);
+    return [...(scene()?.actors || [])].reverse().find(a => Math.hypot(point.x - a.x, point.y - (a.y - 70)) < 75);
   }
 
   function beginPointer(event) {
+    if(!scene())return;
     const p = canvasPoint(event);
     canvas.setPointerCapture(event.pointerId);
     if (tool === 'puppet') {
@@ -235,6 +336,7 @@
   }
 
   function movePointer(event) {
+    if(!scene())return;
     const p = canvasPoint(event);
     if (dragging) moveActor(p);
     if (!drawing) return;
@@ -275,7 +377,13 @@
   function renderActorList() {
     const list = $('#actorList');
     list.innerHTML = '';
-    scene().actors.forEach((a,i) => {
+    const current=scene();
+    if(!current) {
+      list.innerHTML='<div class="actor-empty">Create a scene before adding actors.</div>';
+      $('#actorCount').textContent='0';
+      return;
+    }
+    current.actors.forEach((a,i) => {
       const el = document.createElement('div');
       el.className = `actor-card${a.id === activeActorId ? ' selected' : ''}`;
       el.tabIndex = 0;
@@ -290,23 +398,60 @@
       });
       list.appendChild(el);
     });
-    $('#actorCount').textContent = scene().actors.length;
+    if(!current.actors.length)list.innerHTML='<div class="actor-empty">No actors yet. Add one when the set is ready.</div>';
+    $('#actorCount').textContent = current.actors.length;
   }
 
   function saveThumb() {
+    if(!scene())return;
     render();
     scene().thumb = canvas.toDataURL('image/jpeg',.7);
     renderTimeline();
+    persistProject();
+  }
+
+  function setSceneControls(enabled) {
+    $('#sceneName').disabled=!enabled;
+    $('#sceneDuration').disabled=!enabled;
+    $('#recordBtn').disabled=!enabled;
+    $('#rewindBtn').disabled=!enabled;
+    $('#playBtn').disabled=!enabled;
+    $('#duplicateSceneBtn').disabled=!enabled;
+    $('#addActorBtn').disabled=!enabled;
+    $('#playAllBtn').disabled=!scenes.length;
+    $('#exportBtn').disabled=!scenes.length;
+  }
+
+  function renderEmptyProject() {
+    activeSceneId=null;
+    activeActorId=null;
+    drawBackdrop(null);
+    $('#canvasShell').classList.add('empty');
+    $('#blankStage').classList.add('show');
+    $('#emptyNudge').style.display='none';
+    $('#sceneNumber').textContent='NO SCENE';
+    $('#sceneName').value='';
+    $('#durationTime').textContent='0:00.0';
+    $('#currentTime').textContent='0:00.0';
+    renderActorList();
+    renderTimeline();
+    setSceneControls(false);
   }
 
   function renderTimeline() {
     const timeline = $('#timeline');
     timeline.innerHTML='';
+    if(!scenes.length) {
+      const empty=document.createElement('div');
+      empty.className='timeline-empty';
+      empty.innerHTML='<b>No scenes yet</b><span>Your rough cut will build from left to right.</span>';
+      timeline.appendChild(empty);
+    }
     scenes.forEach((s,i) => {
       const card=document.createElement('div');
       card.className=`scene-card${s.id===activeSceneId?' selected':''}`;
       card.draggable=true; card.dataset.id=s.id;
-      card.innerHTML=`<span class="scene-index">${String(i+1).padStart(2,'0')}</span><span class="scene-content">${s.thumb?`<img class="scene-thumb" src="${s.thumb}" alt="">`:'<span class="scene-thumb"></span>'}<span class="scene-caption">${s.name}</span></span>`;
+      card.innerHTML=`<span class="scene-index">${String(i+1).padStart(2,'0')}</span><span class="scene-content">${s.thumb?`<img class="scene-thumb" src="${s.thumb}" alt="">`:'<span class="scene-thumb"></span>'}<span class="scene-caption">${escapeHtml(s.name)}</span></span>`;
       card.addEventListener('click',()=>loadScene(s.id));
       card.addEventListener('dragstart',()=>{draggedSceneId=s.id;});
       card.addEventListener('dragover',e=>e.preventDefault());
@@ -319,16 +464,23 @@
   }
 
   function loadScene(id) {
+    if(recording)finishRecording();
     stopPlayback();
     activeSceneId=id;
     const s=scene();
+    if(!s){renderEmptyProject();return;}
     activeActorId=s.actors[0]?.id;
+    $('#canvasShell').classList.remove('empty');
+    $('#blankStage').classList.remove('show');
+    $('#emptyNudge').style.display=s.actors.length?'block':'none';
     $('#sceneName').value=s.name;
     $('#sceneDuration').value=String(s.duration);
     $('#durationTime').textContent=formatTime(s.duration);
     $('#sceneNumber').textContent=`SCENE ${String(scenes.indexOf(s)+1).padStart(2,'0')}`;
     $$('.backdrop').forEach(b=>b.classList.toggle('selected',b.dataset.bg===s.background));
+    setSceneControls(true);
     renderActorList(); renderTimeline(); render();
+    persistProject();
   }
 
   function reorderScene(fromId,toId) {
@@ -337,10 +489,12 @@
     scenes.splice(to,0,scenes.splice(from,1)[0]);
     renderTimeline();
     $('#sceneNumber').textContent=`SCENE ${String(scenes.findIndex(s=>s.id===activeSceneId)+1).padStart(2,'0')}`;
+    persistProject();
     toast('Scene order updated');
   }
 
   function addActor() {
+    if(!scene()){toast('Create a scene first');return;}
     if(scene().actors.length>=6){toast('Six actors is plenty of chaos');return;}
     const id=nextActorId++;
     const names=['Tiny Menace','Tall Stranger','Drama Club Ghost','The Principal'];
@@ -350,16 +504,13 @@
 
   function deleteActor(id) {
     const s = scene();
-    if (s.actors.length === 1) {
-      toast('Every scene needs at least one actor');
-      return;
-    }
+    if(!s)return;
     const index = s.actors.findIndex(a => a.id === id);
     if (index < 0) return;
     if (recording && activeActorId === id) finishRecording();
     const [removed] = s.actors.splice(index, 1);
     if (activeActorId === id) {
-      activeActorId = s.actors[Math.min(index, s.actors.length - 1)].id;
+      activeActorId = s.actors[Math.min(index, s.actors.length - 1)]?.id || null;
     }
     renderActorList();
     saveThumb();
@@ -368,12 +519,12 @@
 
   function addScene() {
     const id=nextSceneId++;
-    const actors=[makeActor(nextActorId++,'Hero-ish',actorPalette[0],390,350)];
-    scenes.push(makeScene(id,`Untitled scene ${scenes.length+1}`,'#fbf9f2',actors));
+    scenes.push(makeScene(id,`Scene ${scenes.length+1}`,'#fbf9f2',[]));
     loadScene(id); saveThumb(); toast('Fresh scene added');
   }
 
   function duplicateScene() {
+    if(!scene())return;
     const copy=clone(scene());
     copy.id=nextSceneId++; copy.name=`${copy.name} (copy)`;
     copy.actors.forEach(a=>a.id=nextActorId++);
@@ -413,6 +564,7 @@
   }
 
   function playScene(onDone) {
+    if(!scene()){toast('Create a scene first');return;}
     if(playing){stopPlayback();return;}
     if(recording)finishRecording();
     playing=true; playStartedAt=performance.now(); $('#playBtn').textContent='Ⅱ';
@@ -432,6 +584,7 @@
   }
 
   function playRoughCut() {
+    if(!scenes.length){toast('Add a scene to start your rough cut');return;}
     if(roughCutPlaying){roughCutPlaying=false;stopPlayback();$('#playAllBtn').innerHTML='<span>▶</span> Play rough cut';return;}
     roughCutPlaying=true; let index=0; $('#playAllBtn').innerHTML='<span>■</span> Stop rough cut';
     const next=()=>{
@@ -576,6 +729,7 @@
   }
 
   async function exportTimeline() {
+    if(!scenes.length){toast('Add a scene before exporting');return;}
     if(exporting)return;
     exporting=true;
     if(recording)finishRecording();
@@ -618,26 +772,31 @@
   $$('.swatch').forEach(btn=>btn.addEventListener('click',()=>{ ink=btn.dataset.color; $$('.swatch').forEach(b=>b.classList.toggle('selected',b===btn)); }));
   $('#customColor').addEventListener('input',e=>{ink=e.target.value;$$('.swatch').forEach(b=>b.classList.remove('selected'));});
   $('#brushSize').addEventListener('input',e=>{brushSize=+e.target.value;$('#brushOutput').value=brushSize;});
-  $$('.backdrop').forEach(btn=>btn.addEventListener('click',()=>{history.push(scene().drawing);scene().background=btn.dataset.bg;$$('.backdrop').forEach(b=>b.classList.toggle('selected',b===btn));saveThumb();}));
-  $('#clearBgBtn').addEventListener('click',()=>{history.push(scene().drawing);scene().drawing=null;saveThumb();toast('Backdrop drawing cleared');});
-  $('#undoBtn').addEventListener('click',()=>{if(!history.length){toast('Nothing to undo yet');return;}scene().drawing=history.pop();saveThumb();});
+  $$('.backdrop').forEach(btn=>btn.addEventListener('click',()=>{if(!scene())return;history.push(scene().drawing);scene().background=btn.dataset.bg;$$('.backdrop').forEach(b=>b.classList.toggle('selected',b===btn));saveThumb();}));
+  $('#clearBgBtn').addEventListener('click',()=>{if(!scene())return;history.push(scene().drawing);scene().drawing=null;saveThumb();toast('Backdrop drawing cleared');});
+  $('#undoBtn').addEventListener('click',()=>{if(!scene()||!history.length){toast('Nothing to undo yet');return;}scene().drawing=history.pop();saveThumb();});
   $('#addActorBtn').addEventListener('click',addActor);
   $('#addSceneBtn').addEventListener('click',addScene);
+  $('#firstSceneBtn').addEventListener('click',addScene);
   $('#duplicateSceneBtn').addEventListener('click',duplicateScene);
   $('#recordBtn').addEventListener('click',startRecording);
   $('#playBtn').addEventListener('click',()=>playScene());
   $('#playAllBtn').addEventListener('click',playRoughCut);
   $('#exportBtn').addEventListener('click',exportTimeline);
   $('#rewindBtn').addEventListener('click',stopPlayback);
-  $('#sceneDuration').addEventListener('change',e=>{scene().duration=+e.target.value;$('#durationTime').textContent=formatTime(scene().duration);renderTimeline();});
-  $('#sceneName').addEventListener('change',e=>{scene().name=e.target.value.trim()||'Untitled scene';e.target.value=scene().name;renderTimeline();});
+  $('#sceneDuration').addEventListener('change',e=>{if(!scene())return;scene().duration=+e.target.value;$('#durationTime').textContent=formatTime(scene().duration);renderTimeline();persistProject();});
+  $('#sceneName').addEventListener('change',e=>{if(!scene())return;scene().name=e.target.value.trim()||'Untitled scene';e.target.value=scene().name;renderTimeline();persistProject();});
   $('#onionToggle').addEventListener('change',render);
   $('#poseStyle').addEventListener('change',render);
   $('#helpBtn').addEventListener('click',()=>$('#helpDialog').showModal());
   $('#closeHelp').addEventListener('click',()=>$('#helpDialog').close());
   $('#gotItBtn').addEventListener('click',()=>$('#helpDialog').close());
   $('#helpDialog').addEventListener('click',e=>{if(e.target===$('#helpDialog'))$('#helpDialog').close();});
-  $('#projectName').addEventListener('change',()=>toast('Project title saved locally'));
+  $('#projectsBtn').addEventListener('click',showProjectChooser);
+  $('#newProjectBtn').addEventListener('click',createBlankProject);
+  $('#closeProjects').addEventListener('click',()=>{if(currentProjectId)$('#projectDialog').close();else createBlankProject();});
+  $('#projectDialog').addEventListener('cancel',event=>{if(!currentProjectId){event.preventDefault();createBlankProject();}});
+  $('#projectName').addEventListener('change',()=>{const value=$('#projectName').value.trim();$('#projectName').value=value||'Untitled project';persistProject();toast('Project title saved on this device');});
   document.addEventListener('keydown',e=>{
     if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName))return;
     const map={v:'puppet',p:'pencil',e:'eraser',l:'line'};
@@ -646,9 +805,12 @@
     if(e.key.toLowerCase()==='r')startRecording();
   });
 
-  renderActorList();
-  render();
-  scenes[0].thumb=canvas.toDataURL('image/jpeg',.7);
-  const initial=activeSceneId; activeSceneId=2; render(); scenes[1].thumb=canvas.toDataURL('image/jpeg',.7); activeSceneId=initial;
-  loadScene(1);
+  renderEmptyProject();
+  const savedProjects=readProjects();
+  if(savedProjects.length) {
+    renderProjectChooser();
+    $('#projectDialog').showModal();
+  } else {
+    createBlankProject();
+  }
 })();

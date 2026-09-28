@@ -16,10 +16,11 @@
     </a>
     <div class="project-title">
       <span class="status-dot" aria-hidden="true"></span>
-      <input id="projectName" value="The Great Hallway Escape" aria-label="Project name">
-      <span class="autosave">Saved locally</span>
+      <input id="projectName" value="Untitled project" aria-label="Project name">
+      <span class="autosave" id="saveStatus">Saved on this device</span>
     </div>
     <div class="header-actions">
+      <button class="icon-button" id="projectsBtn" title="Your projects" aria-label="Open your projects">▤</button>
       <button class="icon-button" id="undoBtn" title="Undo background stroke" aria-label="Undo background stroke">↶</button>
       <button class="icon-button" id="helpBtn" title="Quick guide" aria-label="Open quick guide">?</button>
       <button class="button export-button" id="exportBtn"><span>⇩</span> Export video</button>
@@ -71,8 +72,8 @@
     <section class="stage-area" aria-label="Storyboard stage">
       <div class="scene-meta">
         <div>
-          <span class="take-pill" id="sceneNumber">SCENE 01</span>
-          <input id="sceneName" value="Hallway — wide shot" aria-label="Scene name">
+          <span class="take-pill" id="sceneNumber">NO SCENE</span>
+          <input id="sceneName" value="" placeholder="Create a scene to begin" aria-label="Scene name" disabled>
         </div>
         <div class="stage-hint" id="stageHint"><span>↖</span> Drag a figure to puppeteer</div>
       </div>
@@ -85,6 +86,12 @@
           <b>Rendering your rough cut…</b>
           <span id="exportProgress">0%</span>
           <i><span id="exportProgressBar"></span></i>
+        </div>
+        <div class="blank-stage" id="blankStage">
+          <span class="blank-doodle" aria-hidden="true">✎</span>
+          <b>Your board is blank</b>
+          <p>Create a scene, sketch the set, then add actors when you’re ready.</p>
+          <button class="button button-yellow" id="firstSceneBtn">＋ Create first scene</button>
         </div>
         <div class="empty-nudge" id="emptyNudge">Grab a stick figure<br><span>and make some trouble ↓</span></div>
       </div>
@@ -110,7 +117,7 @@
 
     <aside class="panel actors-panel" aria-label="Actors">
       <section>
-        <div class="section-label label-row"><span>ACTORS IN THIS SCENE</span><span id="actorCount">2</span></div>
+        <div class="section-label label-row"><span>ACTORS IN THIS SCENE</span><span id="actorCount">0</span></div>
         <div id="actorList" class="actor-list"></div>
         <button class="add-actor" id="addActorBtn"><span>＋</span> Add another actor</button>
       </section>
@@ -138,7 +145,7 @@
     <div class="timeline-header">
       <div>
         <span class="section-label">ROUGH CUT</span>
-        <b><span id="sceneCount">2</span> scenes · <span id="totalDuration">8 sec</span></b>
+        <b><span id="sceneCount">0</span> scenes · <span id="totalDuration">0 sec</span></b>
       </div>
       <div class="timeline-actions">
         <button id="duplicateSceneBtn">Duplicate scene</button>
@@ -151,6 +158,22 @@
     </div>
     <p class="timeline-tip">Drag scene cards to reorder your rough cut.</p>
   </section>
+
+  <dialog id="projectDialog" class="project-dialog">
+    <button class="dialog-close" id="closeProjects" aria-label="Close project chooser">×</button>
+    <span class="dialog-kicker">YOUR STICKBOARDS</span>
+    <h2>What are we blocking today?</h2>
+    <p class="project-dialog-copy">Projects are saved in this browser on this device.</p>
+    <button class="new-project-card" id="newProjectBtn">
+      <span>＋</span>
+      <b>Start a blank project</b>
+      <small>No scenes, no actors, no baggage.</small>
+    </button>
+    <div class="recent-projects-wrap" id="recentProjectsWrap">
+      <div class="section-label">RECENT PROJECTS</div>
+      <div class="recent-projects" id="recentProjects"></div>
+    </div>
+  </dialog>
 
   <dialog id="helpDialog">
     <button class="dialog-close" id="closeHelp" aria-label="Close">×</button>
